@@ -1,10 +1,11 @@
-// 力の種類あての検査。問題の作り方（15種類×3000問：選び肢・答えは1つ・答えととくちょうと力のもとが力の表どおり・出典がある）・
+// 力の種類あての検査。問題の作り方（18種類×3000問：選び肢・答えは1つ・答えととくちょうと力のもとが力の表どおり・出典がある）・
 // 今日の5問と上級の組み方（3年分）・とことんの並び（何百回作って1回の中で重ならない）・通しで遊ぶ・まちがい・ヒント・続きから・
 // 上級・練習・とことん・力の手帳・実績・カレンダー・あとから・文字の大きさ・言い方・スマホ幅・PWA・引き継ぎ・見やすさを確かめる。
 // 使い方: node qa/run.mjs   失敗があれば終了コード 1。結果は qa-report/report.md。
 import { chromium } from "playwright";
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -30,6 +31,8 @@ const TB = {
   g_ringo: ["重力", "落ちて"], d_bane: ["弾性の力", "のばした"], m_hon: ["摩擦の力", "すべらせた"], j_clip: ["磁力", "磁石を近づける"], e_kosuru: ["電気の力", "こすり合わせた|こすった"],
   g_jump: ["重力", "ジャンプ|投げ上げた"], d_hassha: ["弾性の力", "ゴム|スポンジ"], m_kasane: ["摩擦の力", "交互に重ねた"], j_kyoku: ["磁力", "極"], e_kami: ["電気の力", "下じきで髪の毛をこすって"],
   g_tsuki: ["重力", "月面"], d_nobi: ["弾性の力", "比例"], m_hon2: ["摩擦の力", "ふれあう面"], j_meiro: ["磁力", "鉄の玉"], e_hanpatsu: ["電気の力", "こすった2本"],
+  // 2026-11-26 から：同じ場面で、問いの向きで答えが決まる（千葉県のプリント 応用問題①②）
+  g_clip: ["重力", "クリップを下向きに引く力は？$"], j_ukasu: ["磁力", "クリップを斜め上向きに引く力は？$"], g_omori: ["重力", "おもりを下向きに引く力は？$"],
 };
 {
   const bad = {}, seen = {}, N = 3000;
@@ -47,7 +50,7 @@ const TB = {
         if (P.grp !== CL[t[0]][0]) why.push("とくちょうが力の表とちがう");
         if (P.cat !== CL[t[0]][1]) why.push("力のもとが力の表とちがう");
         if (!P.src.some((x) => /yaruki\/rika|tikara_kakunin|center\.ibk\.ed\.jp/.test(x[1]))) why.push("出典に理科プリントが無い");
-        if (!/はたらいた力は？$/.test(P.q) || P.rev) why.push("問いの言い方がちがう");
+        if (!(k.from ? /向きに引く力は？$/ : /はたらいた力は？$/).test(P.q) || P.rev) why.push("問いの言い方がちがう");
         if (/重力|弾性|摩擦|磁力|電気の力/.test(P.q)) why.push("問いに力の名前が出ている");
       }
       if (!P.src.length || P.src.some((x) => !Array.isArray(x) || !/^https:\/\//.test(x[1]))) why.push("出典が無い");
@@ -59,8 +62,8 @@ const TB = {
   check(`問題：${G.KINDS.length}種類×${N}問で、選び肢（やさしい3・ほか4）・答えは1つ・答えととくちょうと力のもとが力の表どおり・問いに力の名前が無い・出典がある`, Object.keys(bad).length === 0, JSON.stringify(bad));
   const total = Object.values(seen).reduce((a, s) => a + s.size, 0), few = G.KINDS.filter((k) => seen[k.id].size < 12).map((k) => `${k.id}:${seen[k.id].size}`);
   check("問題の数：全部で300通り以上・どの種類も12通り以上（好きなだけ遊んでも同じ問題が続かない。game-dev.md F6）", total >= 300 && few.length === 0, `${total}通り ${few.join(",")}`);
-  check("問題：種類は15（やさしい5・ふつう5・むずかしい5）", G.KINDS.length === 15 && [0, 1, 2].map((l) => G.kindsOf(l).length).join() === "5,5,5");
-  check("答えの5つが全部出る・2段目の3つ・力のもとの5つも全部出る・どの答えもやさしい・ふつう・むずかしいに1つずつ", G.CLASSES.every((c) => [0, 1, 2].every((l) => G.KINDS.filter((k) => k.lv === l && k.ans === c).length === 1)) && ["hik", "ryo", "sak"].every((g) => G.KINDS.some((k) => k.grp === g)) && Object.keys(G.CATS).every((c) => G.KINDS.some((k) => k.cat === c)));
+  check("問題：種類は18（やさしい5・ふつう5・むずかしい8。むずかしいの3つは 2026-11-26 から）", G.KINDS.length === 18 && [0, 1, 2].map((l) => G.kindsOf(l).length).join() === "5,5,8" && G.KINDS.filter((k) => k.from).map((k) => k.id + k.from).join() === "g_clip2026-11-26,j_ukasu2026-11-26,g_omori2026-11-26");
+  check("答えの5つが全部出る・2段目の3つ・力のもとの5つも全部出る・どの答えもやさしい・ふつう・むずかしいに1つずつ", G.CLASSES.every((c) => [0, 1, 2].every((l) => G.KINDS.filter((k) => k.lv === l && k.ans === c && !k.from).length === 1)) && ["hik", "ryo", "sak"].every((g) => G.KINDS.some((k) => k.grp === g)) && Object.keys(G.CATS).every((c) => G.KINDS.some((k) => k.cat === c)));
   check("答えの決まり（data.js の RULE）が別に書いた表と同じ", Object.entries(CL).every(([c, [g, t]]) => G.RULE[c] && G.RULE[c].grp === g && G.RULE[c].cat === t) && Object.keys(G.RULE).length === 5);
   const longWhy = [], longLook = [], longOpt = [];
   for (const k of G.KINDS) { if ([...k.why].length > 110) longWhy.push(k.id); if ([...k.look].length > 60 || [...k.key].length > 110) longLook.push(k.id); for (let s = 0; s < 200; s++) { const P = G.make(`${k.id}|len${s}`); for (const o of [...P.opts, P.q]) if ([...o].length > 70) longOpt.push(`${k.id}:${o}`); } }
@@ -83,10 +86,25 @@ const TB = {
     if (i < 60) [...dk, ...hk].forEach((k) => cover.add(k));
   }
   check("今日の5問（やさしい2・ふつう2・むずかしい1、種類は重ねない）と上級（むずかしい3・今日のむずかしいと別）を3年分作れる", bad.length === 0, bad.slice(0, 5).join(","));
-  check("2か月のうちに15種類が全部出る・前の日と同じ組の日が少ない", cover.size === 15 && sameAsPrev < 20, `${cover.size}種類・前の日と同じ ${sameAsPrev}日`);
+  check(`2か月のうちに${G.KINDS.length}種類が全部出る・前の日と同じ組の日が少ない`, cover.size === G.KINDS.length && sameAsPrev < 20, `${cover.size}種類・前の日と同じ ${sameAsPrev}日`);
   // 過去の日の問題が変わらない（data.js を直したときの見張り。値は 2026-11-17 に作ったもの）
   const P0 = G.make(G.dailyTags("2026-11-17")[0]);
+  // 2026-11-17〜25 の今日の5問・上級（種類を足す前の data.js で作った指紋。足しても過去の日は変わらない）
+  const past = []; for (let t = Date.parse("2026-11-17"); t <= Date.parse("2026-11-25"); t += 864e5) { const d = new Date(t).toISOString().slice(0, 10); past.push(d + ":" + G.dailyTags(d).join(",") + ";" + G.hardTags(d).join(",")); }
+  const fp = createHash("sha256").update(past.join("\n")).digest("hex").slice(0, 16);
+  check("2026-11-17〜25 の今日の5問・上級が、種類を足す前と同じ（指紋 2c538c3e36902181）", fp === "2c538c3e36902181", fp);
+  const early = [], late = new Set();
+  for (let i = 0; i < 400; i++) { const d = new Date(Date.parse("2026-11-25") - i * 864e5).toISOString().slice(0, 10); for (const t of [...G.dailyTags(d), ...G.hardTags(d)]) if (G.BY[t.split("|")[0]].from) early.push(d); }
+  for (let i = 0; i < 30; i++) { const d = new Date(Date.parse(G.NEW_FROM) + i * 864e5).toISOString().slice(0, 10); for (const t of [...G.dailyTags(d), ...G.hardTags(d)]) if (G.BY[t.split("|")[0]].from) late.add(t.split("|")[0]); }
+  check("足した種類は 2026-11-25 までの日に出ない・2026-11-26 から30日のうちに3つとも出る", !early.length && late.size === 3, `${early.slice(0, 3)} / ${[...late]}`);
   check("第1回（2026-11-17）の1問目が作ったときのまま（並べ替え・削除で過去の日の問題を変えない）", `${P0.kind}:${P0.v}` === PIN && `${P0.q}|${P0.opts.join("/")}` === PINQ, `${P0.kind}:${P0.v} ${P0.q}`);
+}
+
+{
+  // 目立つ言葉だけで選ぶ遊び方（磁石→磁力・こす→電気・ばね/ゴム→弾性・落ち/月面→重力・ほか摩擦）で、むずかしいが全部当たらない（2026-11-25 の磨きの回で、上級3問・とことん12問が全部この遊び方で当たった）
+  const kw = (q) => /磁石/.test(q) ? "磁力" : /こす/.test(q) ? "電気の力" : /ばね|ゴム|スポンジ/.test(q) ? "弾性の力" : /落ち|地面|月面|下へ/.test(q) ? "重力" : "摩擦の力";
+  let n = 0, ok = 0; for (const id of G.kindsOf(2)) for (let s = 0; s < 200; s++) { const P = G.make(`${id}|kw${s}`); n++; if (kw(P.q) === P.ans) ok++; }
+  check("むずかしいは、問いの中の目立つ一語だけで選ぶと当たるのは8割まで（同じ場面で問いの向きを読む問題がある）", ok / n <= 0.8, `${ok}/${n}`);
 }
 
 // ---- 2. ファイルの中身 ----
@@ -520,7 +538,7 @@ try {
   await q.close(); }
 { const q = await newPage(); await closeHow(q);
   await q.evaluate(() => { localStorage.setItem("cks-v1", JSON.stringify({ v: 1, tut: true, days: {}, hdays: {}, adays: {}, dex: { constructor: 1, toString: 2, g_ringo: 1 }, runs: {}, kofi: {}, ach: {}, ebest: 0 })); }); await q.reload(); await q.waitForTimeout(150);
-  check("記録に constructor などの鍵が入っても、力の手帳と実績の種類に数えない（CodeRabbit funka-level#1）", (await q.textContent("#go-dex")).includes("1/15") && await q.evaluate(() => __nm.tally(__nm.load()).kinds) === 1, await q.textContent("#go-dex"));
+  check("記録に constructor などの鍵が入っても、力の手帳と実績の種類に数えない（CodeRabbit funka-level#1）", (await q.textContent("#go-dex")).includes(`1/${G.KINDS.length}`) && await q.evaluate(() => __nm.tally(__nm.load()).kinds) === 1, await q.textContent("#go-dex"));
   await q.close(); }
 { const bad = G.KINDS.filter((k) => { for (let i = 0; i < 200; i++) if (!G.GROUPS[G.make(`${k.id}|g${i}`).grp]) return true; return false; }).map((k) => k.id), used = new Set(G.KINDS.map((k) => k.grp));
   check("2段目「この力のとくちょうは？」：どの種類の問題も3つ（引っぱるだけ・引き合いも反発も・変化に逆らう）のどれかで、3つとも使う", bad.length === 0 && Object.keys(G.GROUPS).join() === "hik,ryo,sak" && used.size === 3, bad.join(",")); }
