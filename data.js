@@ -8,6 +8,7 @@
 (function (root) {
   "use strict";
   const LV = ["やさしい", "ふつう", "むずかしい"];
+  const NEW_FROM = "2026-11-26"; // この日から今日の5問・上級に出す種類（g_clip・j_ukasu・g_omori）
 
   // 出典（画面の「なぜ」に出す）
   const SRC = {
@@ -49,7 +50,7 @@
     return (R, lv) => {
       const si = ri(R, 0, sit.length - 1), mi = ri(R, 0, MEDIA.length - 1);
       const n = lv === 0 ? 2 : 3, ds = pickN(R, near, n);
-      const q = sit[si] + "　はたらいた力は？";
+      const q = /？$/.test(sit[si]) ? sit[si] : sit[si] + "　はたらいた力は？"; // 「？」で終わる言い方は、どの力を問うかを自分で書いたもの（2026-11-26 から）
       return { type: "act", media: MEDIA[mi], q, opts: shuffle(R, [ans, ...ds]), ans, rev: false, v: `${si}:${mi}` };
     };
   }
@@ -108,9 +109,20 @@
     K("e_hanpatsu", 2, "電気の力", "こすったストローどうしが反発", ["chiba"], "同じものでこすった2本です。",
       "こすり合わせて静電気をおびた物体どうしは、反発することもあります（千葉県のプリント）。これも電気の力です。",
       ["同じティッシュでこすった2本のストローを近づけると、たがいにはなれていった。"]),
+    // ---- むずかしい（2026-11-26 から。同じ場面に力がいくつもはたらき、問いの向きで答えが決まる。目立つ言葉だけでは当たらない）----
+    { ...K("g_clip", 2, "重力", "磁石で浮かせたクリップを下へ引く", ["chiba"], "磁石が引くのは斜め上。下へ引くのは別の力です。",
+      "磁石で浮かせたクリップには、斜め上向きの磁石が引く力のほかに、下向きの重力もはたらいています（千葉県のプリント 応用問題②）。",
+      ["糸をつけた鉄のクリップを、磁石で空中に浮かせた。クリップを下向きに引く力は？"]), from: NEW_FROM },
+    { ...K("j_ukasu", 2, "磁力", "浮いたクリップを斜め上へ引く", ["chiba"], "クリップは鉄。上にあるものに注目。",
+      "糸をつけたクリップが空中に浮くのは、斜め上向きに磁石がクリップを引く力がはたらくからです（千葉県のプリント 応用問題②）。",
+      ["糸をつけた鉄のクリップを、磁石で空中に浮かせた。クリップを斜め上向きに引く力は？"]), from: NEW_FROM },
+    { ...K("g_omori", 2, "重力", "ばねにつるしたおもりを下へ引く", ["chiba"], "ばねではなく、おもりを下へ引く力です。",
+      "ばねにつるしたおもりには下向きの重力がはたらき、その力でばねがのびます（千葉県のプリント 応用問題①）。",
+      ["ばねにおもりをつるすと、ばねがのびた。おもりを下向きに引く力は？"]), from: NEW_FROM },
   ];
   const BY = Object.fromEntries(KINDS.map((k) => [k.id, k]));
-  const kindsOf = (lv) => KINDS.filter((k) => k.lv === lv).map((k) => k.id);
+  // date を渡すと、その日に出せる種類だけ（from より前の日は足す前と同じ並び＝過去の日の問題が変わらない）
+  const kindsOf = (lv, date) => KINDS.filter((k) => k.lv === lv && (!date || !k.from || date >= k.from)).map((k) => k.id);
 
   function seedOf(str) { let h = 2166136261; for (const ch of String(str)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
   function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -126,15 +138,15 @@
 
   // 今日の5問（やさしい2・ふつう2・むずかしい1）。種類は重ねない
   function dailyTags(date) {
-    const R = rng(seedOf("day:" + date)), e = pickN(R, kindsOf(0), 2), n = pickN(R, kindsOf(1), 2), h = pickN(R, kindsOf(2), 1);
+    const R = rng(seedOf("day:" + date)), e = pickN(R, kindsOf(0, date), 2), n = pickN(R, kindsOf(1, date), 2), h = pickN(R, kindsOf(2, date), 1);
     return [...e, ...n, ...h].map((id, i) => `${id}|${date}:d${i}`);
   }
   // 上級の3問（むずかしいだけ・今日の5問のむずかしいとは別の種類）
   function hardTags(date) {
-    const dh = dailyTags(date)[4].split("|")[0], R = rng(seedOf("hard:" + date)), h = pickN(R, kindsOf(2).filter((x) => x !== dh), 3);
+    const dh = dailyTags(date)[4].split("|")[0], R = rng(seedOf("hard:" + date)), h = pickN(R, kindsOf(2, date).filter((x) => x !== dh), 3);
     return h.map((id, i) => `${id}|${date}:h${i}`);
   }
 
-  const CKS = { KINDS, BY, GROUPS, CATS, RULE, LV, SRC, CLASSES, kindsOf, seedOf, rng, make, keyOf, dailyTags, hardTags, pickN };
+  const CKS = { NEW_FROM, KINDS, BY, GROUPS, CATS, RULE, LV, SRC, CLASSES, kindsOf, seedOf, rng, make, keyOf, dailyTags, hardTags, pickN };
   if (typeof module !== "undefined" && module.exports) module.exports = CKS; else root.CKS = CKS;
 })(typeof self !== "undefined" ? self : this);
